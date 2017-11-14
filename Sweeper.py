@@ -350,13 +350,14 @@ class Sweeper(object):
         except ClientError:
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
-    def run_checks(self, profile):
+    def run_checks(self, profile=None):
         """
         Wrapper function that runs the checks we need
         """
         self.output('\nSweeping AWS profile ({})'.format(profile))
         self.output("==========================================================")
-        self.current_profile = profile
+        if profile:
+            self.current_profile = profile
         try:
             if 'elb' not in self.checks_to_exclude:
                 self.check_elbs()
@@ -393,14 +394,14 @@ class Sweeper(object):
             for profile in self.profile_name:
                 self.run_checks(profile)
         elif isinstance(self.profile_name, str):
-            self.current_profile = self.profile_name
-            self.run_checks(self.current_profile)
+            self.run_checks(self.profile_name)
 
         if self.output_file:
             results = open(args['-o'], 'w')
             results.write(self.message)
             results.close()
         self.output("Sweeper is complete!")
+        sys.exit(0)
 
 if __name__ == '__main__':
     # Get the args, pass them in or default them or fail
