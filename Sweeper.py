@@ -11,9 +11,10 @@ from __future__ import print_function
 from os import environ
 from os.path import expanduser
 import sys
+import datetime
 import yaml
 import boto3
-from botocore.exceptions import ProfileNotFound
+from botocore.exceptions import ProfileNotFound, ClientError
 
 def print_banner():
     """
@@ -37,7 +38,7 @@ def show_usage():
     print("usage: python Sweeper.py -p <profile> [ -h ]")
     print(" options:")
     print("  -c <config file>, Yaml config file to load (loads default found in root file if not provided)")
-    print("  -p <profile>, AWS Profile to use from credentials file. If ommited, Sweeper will use env vars")
+    print("  -p <profile(s)>, AWS Profile(s) to use from credentials file. If ommited, Sweeper will use env vars. For more profile, pass a csv list (default1,default2)")
     print("  -o <file name>, Outputs results into a text file instead of std out")
     print("  -h, displays this usage")
     sys.exit()
@@ -49,6 +50,7 @@ class Sweeper(object):
     def __init__(self, args):
         # Sensible class defaults
         self.profile_name = ''
+        self.current_profile = ''
         self.regions_to_exclude = []
         self.checks_to_exclude = []
         self.regions = [
@@ -105,7 +107,11 @@ class Sweeper(object):
                 home = expanduser("~")
                 creds_file = open("{}/.aws/credentials".format(home))
                 creds_file.close()
-                self.profile_name = str(args['-p'])
+                if ',' in str(args['-p']):
+                    # Multiple profiles
+                    self.profile_name = str(args['-p']).split(',')
+                else:
+                    self.profile_name = str(args['-p'])
             except IOError:
                 print("ERROR: AWS Credentials file not found. Please run 'aws configure' first")
                 sys.exit(1)
@@ -141,22 +147,21 @@ class Sweeper(object):
 
     def create_client(self, service, region):
         """
-        Returns the session object needed to perform the API calls
+        Sets up the current session object needed to perform the API calls
         """
-        try:
-            if self.profile_name:
-                session = boto3.Session(
-                    profile_name=self.profile_name,
-                    region_name=region
-                )
-                return session.client(service)
-            else:
-                return boto3.client(service, region_name=region)
-        except ProfileNotFound:
-            print("Profile ({}) could not be found".format(self.profile_name))
-            sys.exit(1)
+        if self.current_profile:
+            session = boto3.Session(
+                profile_name=self.current_profile,
+                region_name=region
+            )
+            return session.client(service)
+        else:
+            return boto3.client(service, region_name=region)
 
     def output(self, string):
+        """
+        Determines how to output the results
+        """
         if self.output_file:
             self.message += string
             self.message += '\n'
@@ -167,194 +172,235 @@ class Sweeper(object):
         """
         Uses the API's to check for orphaned ELB's
         """
-        for region in self.regions:
-            self.output("\nChecking for orphaned ELB's in {}".format(region))
-            self.output("This sweep looks for ELB's without any attached instances.")
-            self.output("==========================================================")
-            client = self.create_client('elb', region)
-            response = client.describe_load_balancers()
-            for elb in response['LoadBalancerDescriptions']:
-                if not elb['Instances']:
-                    self.output("{} does not have any instances attached".format(elb['LoadBalancerName']))
-            self.output("ELB sweep in {} complete".format(region))
-        self.output("All configured regions checked for orphaned ELB's")
+        try:
+            for region in self.regions:
+                client = self.create_client('elb', region)
+                self.output("\nChecking for orphaned ELB's in {}".format(region))
+                self.output("This sweep looks for ELB's without any attached instances.")
+                self.output("==========================================================")
+                response = client.describe_load_balancers()
+                for elb in response['LoadBalancerDescriptions']:
+                    if not elb['Instances']:
+                        self.output("{} does not have any instances attached".format(elb['LoadBalancerName']))
+                self.output("ELB sweep in {} complete".format(region))
+                self.output("All configured regions checked for orphaned ELB's")
+        except ClientError:
+            self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_ebs_volumes(self):
         """
         Uses the API's to check for unattached volumes.
         #TODO currently max 500 results
         """
-        for region in self.regions:
-            self.output("\nChecking for unattached EBS Volumes in {}".format(region))
-            self.output("==========================================================")
-            client = self.create_client('ec2', region)
-            response = client.describe_volumes()
-            for volume in response['Volumes']:
-                if not volume['Attachments']:
-                    self.output("{} does not have any attachments".format(volume['VolumeId']))
-            self.output("Volume sweep in {} complete".format(region))
-        self.output("All configured regions checked for unattached EBS volumes")
+        try:
+            for region in self.regions:
+                self.output("\nChecking for unattached EBS Volumes in {}".format(region))
+                self.output("==========================================================")
+                client = self.create_client('ec2', region)
+                response = client.describe_volumes()
+                for volume in response['Volumes']:
+                    if not volume['Attachments']:
+                        self.output("{} does not have any attachments".format(volume['VolumeId']))
+                self.output("Volume sweep in {} complete".format(region))
+                self.output("All configured regions checked for unattached EBS volumes")
+        except ClientError:
+            self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_snapshots(self):
         """
         Checks if snapshots are paired to AMI's
         """
-        for region in self.regions:
-            snapshot_list = []
-            self.output("\nChecking for unused snapshots in {}".format(region))
-            self.output("**WARNING: This can take along time. Please use with caution**")
-            self.output("==========================================================")
-            client = self.create_client('ec2', region)
-            snapshots = client.describe_snapshots(
-                Filters=[
-                    {
-                        'Name':'status',
-                        'Values': [
-                            'completed'
-                        ]
-                    }
-                ]
-            )
-            images = client.describe_images(
-                Filters=[
-                    {
-                        'Name':'state',
-                        'Values': [
-                            'available'
-                        ]
-                    }
-                ]
-            )
-            for snapshot in snapshots['Snapshots']:
-                snapshot_id = snapshot['SnapshotId']
-                snapshot_found = False
-                for image in images['Images']:
-                    if 'BlockDeviceMappings' in image:
-                        for mapping in image['BlockDeviceMappings']:
-                            if 'Ebs' in mapping:
-                                if 'SnapshotId' in mapping['Ebs']:
-                                    snapshot_found = mapping['Ebs']['SnapshotId'] == snapshot_id
-                if not snapshot_found:
-                    snapshot_list.append(snapshot_id)
-            self.output("There are {} snapshots to remove".format(len(snapshot_list)))
-            if self.output_file:
-                for s in snapshot_list:
-                    self.output(s)
-            self.output("Snapshot sweep complete in {}".format(region))
+        try:
+            for region in self.regions:
+                snapshot_list = []
+                self.output("\nChecking for unused snapshots in {}".format(region))
+                self.output("**WARNING: This can take along time. Please use with caution**")
+                self.output("==========================================================")
+                client = self.create_client('ec2', region)
+                snapshots = client.describe_snapshots(
+                    Filters=[
+                        {
+                            'Name':'status',
+                            'Values': [
+                                'completed'
+                            ]
+                        }
+                    ]
+                )
+                images = client.describe_images(
+                    Filters=[
+                        {
+                            'Name':'state',
+                            'Values': [
+                                'available'
+                            ]
+                        }
+                    ]
+                )
+                for snapshot in snapshots['Snapshots']:
+                    snapshot_id = snapshot['SnapshotId']
+                    snapshot_found = False
+                    for image in images['Images']:
+                        if 'BlockDeviceMappings' in image:
+                            for mapping in image['BlockDeviceMappings']:
+                                if 'Ebs' in mapping:
+                                    if 'SnapshotId' in mapping['Ebs']:
+                                        snapshot_found = mapping['Ebs']['SnapshotId'] == snapshot_id
+                    if not snapshot_found:
+                        snapshot_list.append(snapshot_id)
+                self.output("There are {} snapshots to remove".format(len(snapshot_list)))
+                if self.output_file:
+                    for snap in snapshot_list:
+                        self.output(snap)
+                self.output("Snapshot sweep complete in {}".format(region))
+        except ClientError:
+            self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_eips(self):
         """
         Checks if EIPS arent attached to an instance
         """
-        for region in self.regions:
-            self.output("\nChecking for unattached EIP's in {}".format(region))
-            self.output("==========================================================")
-            client = self.create_client('ec2', region)
-            response = client.describe_addresses()
-            for address in response['Addresses']:
-                if 'InstanceId' not in address:
-                    self.output("{} is not attached to any instance.".format(address['PublicIp']))
-            self.output("EIP sweep complete in {}".format(region))
+        try:
+            for region in self.regions:
+                self.output("\nChecking for unattached EIP's in {}".format(region))
+                self.output("==========================================================")
+                client = self.create_client('ec2', region)
+                response = client.describe_addresses()
+                for address in response['Addresses']:
+                    if 'InstanceId' not in address:
+                        self.output("{} is not attached to any instance.".format(address['PublicIp']))
+                self.output("EIP sweep complete in {}".format(region))
+        except ClientError:
+            self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_beanstalk_environments(self):
         """
         Checks for ElasticBeanstalk environments and if they are still running. These
         environments can incur a cost as they are designed to be highly available
         """
-        for region in self.regions:
-            self.output("\nChecking for Beanstalk environments still running in {}".format(region))
-            self.output("This checks for environments which will keep services running at a cost")
-            self.output("==========================================================")
-            client = self.create_client('elasticbeanstalk', region)
-            response = client.describe_environments(
-                IncludeDeleted=False
-            )
-            for environment in response['Environments']:
-                self.output("{} is still running. Did you know this?".format(environment['EnvironmentName']))
-            self.output("ElasticBeanstalk sweep complete in {}".format(region))
+        try:
+            for region in self.regions:
+                self.output("\nChecking for Beanstalk environments still running in {}".format(region))
+                self.output("This checks for environments which will keep services running at a cost")
+                self.output("==========================================================")
+                client = self.create_client('elasticbeanstalk', region)
+                response = client.describe_environments(
+                    IncludeDeleted=False
+                )
+                for environment in response['Environments']:
+                    self.output("{} is still running. Did you know this?".format(environment['EnvironmentName']))
+                self.output("ElasticBeanstalk sweep complete in {}".format(region))
+        except ClientError:
+            self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_opsworks(self):
         """
         Checks all running services managed by Opsworks.
         """
-        for region in self.regions:
-            self.output("\nChecking for Opsworks provisioned resources in {}".format(region))
-            self.output("Opsworks has self-healing functionality that potentially could have")
-            self.output("healed a service that you destroyed elsewhere.")
-            self.output("==========================================================")
-            client = self.create_client('opsworks', region)
-            response = client.describe_stacks()
-            for stack in response['Stacks']:
-                # first list any ecs clusters
-                stack_id = stack['StackId']
-                self.output("Checking {} for services. Information gathering for action.".format(stack_id))
-                # ECS
-                ecs = client.describe_ecs_clusters(
-                    StackId=stack_id
-                )
-                self.output("{} has {} running ECS Clusters".format(stack_id, len(ecs['EcsClusters'])))
-                # EIP
-                eip = client.describe_elastic_ips(
-                    StackId=stack_id
-                )
-                self.output("{} has {} EIP's".format(stack_id, len(eip['ElasticIps'])))
-                # EC2 Instances
-                instances = client.describe_instances(
-                    StackId=stack_id
-                )
-                self.output("{} has {} Ec2 instances running".format(
-                    stack_id,
-                    len(instances['Instances']))
-                )
-                # ELB
-                elbs = client.describe_elastic_load_balancers(
-                    StackId=stack_id
-                )
-                self.output("{} has {} ELB's running".format(stack_id, len(elbs['ElasticLoadBalancers'])))
-                # RDS
-                rds = client.describe_rds_db_instances(
-                    StackId=stack_id
-                )
-                self.output("{} has {} RDS instances running".format(
-                    stack_id,
-                    len(rds['RdsDbInstances']))
-                )
-                # EBS
-                ebs = client.describe_volumes(
-                    StackId=stack_id
-                )
-                self.output("{} has {} EBS Volumes registered".format(stack_id, len(ebs['Volumes'])))
+        try:
+            for region in self.regions:
+                self.output("\nChecking for Opsworks provisioned resources in {}".format(region))
+                self.output("Opsworks has self-healing functionality that potentially could have")
+                self.output("healed a service that you destroyed elsewhere.")
+                self.output("==========================================================")
+                client = self.create_client('opsworks', region)
+                response = client.describe_stacks()
+                for stack in response['Stacks']:
+                    # first list any ecs clusters
+                    stack_id = stack['StackId']
+                    self.output("Checking {} for services. Information gathering for action.".format(stack_id))
+                    # ECS
+                    ecs = client.describe_ecs_clusters(
+                        StackId=stack_id
+                    )
+                    self.output("{} has {} running ECS Clusters".format(stack_id, len(ecs['EcsClusters'])))
+                    # EIP
+                    eip = client.describe_elastic_ips(
+                        StackId=stack_id
+                    )
+                    self.output("{} has {} EIP's".format(stack_id, len(eip['ElasticIps'])))
+                    # EC2 Instances
+                    instances = client.describe_instances(
+                        StackId=stack_id
+                    )
+                    self.output("{} has {} Ec2 instances running".format(
+                        stack_id,
+                        len(instances['Instances']))
+                    )
+                    # ELB
+                    elbs = client.describe_elastic_load_balancers(
+                        StackId=stack_id
+                    )
+                    self.output("{} has {} ELB's running".format(stack_id, len(elbs['ElasticLoadBalancers'])))
+                    # RDS
+                    rds = client.describe_rds_db_instances(
+                        StackId=stack_id
+                    )
+                    self.output("{} has {} RDS instances running".format(
+                        stack_id,
+                        len(rds['RdsDbInstances']))
+                    )
+                    # EBS
+                    ebs = client.describe_volumes(
+                        StackId=stack_id
+                    )
+                    self.output("{} has {} EBS Volumes registered".format(stack_id, len(ebs['Volumes'])))
 
-            self.output("Opsworks sweep complete in {}".format(region))
+                self.output("Opsworks sweep complete in {}".format(region))
+        except ClientError:
+            self.output("Your AWS profile does not have access. Please fix this and try again\n")
+
+    def run_checks(self, profile):
+        """
+        Wrapper function that runs the checks we need
+        """
+        self.output('\nSweeping AWS profile ({})'.format(profile))
+        self.output("==========================================================")
+        self.current_profile = profile
+        try:
+            if 'elb' not in self.checks_to_exclude:
+                self.check_elbs()
+            if 'ebs-volumes' not in self.checks_to_exclude:
+                self.check_ebs_volumes()
+            if 'ebs-snapshots' not in self.checks_to_exclude:
+                self.check_snapshots()
+            if 'ec2-eips' not in self.checks_to_exclude:
+                self.check_eips()
+            if 'elastic-beanstalk' not in self.checks_to_exclude:
+                self.check_beanstalk_environments()
+            if 'opsworks' not in self.checks_to_exclude:
+                self.check_opsworks()
+            # TODO add s3 checks. Buckets that havent been access in n days. Are they still used?
+            # TODO more checks!
+        except ProfileNotFound:
+            self.output("AWS profile ({}) could not be found".format(self.current_profile))
+            if not isinstance(self.profile_name, list):
+                sys.exit(1)
+            else:
+                pass
 
     def run_sweeper(self, args):
         """
         Runs the sweeper based on the profile passed in and the config settings
         """
         if not self.output_file:
-            print("Outputting results to screen")
+            print("Sweeping to screen")
         else:
-            print("Outputting results to results.txt")
+            print("Sweeping to {}".format(args['-o']))
 
-        if 'elb' not in self.checks_to_exclude:
-            self.check_elbs()
-        if 'ebs-volumes' not in self.checks_to_exclude:
-            self.check_ebs_volumes()
-        if 'ebs-snapshots' not in self.checks_to_exclude:
-            self.check_snapshots()
-        if 'ec2-eips' not in self.checks_to_exclude:
-            self.check_eips()
-        if 'elastic-beanstalk' not in self.checks_to_exclude:
-            self.check_beanstalk_environments()
-        if 'opsworks' not in self.checks_to_exclude:
-            self.check_opsworks()
-        # TODO add s3 checks. Buckets that havent been access in n days. Are they still used?
-        # TODO more checks!
+        self.output('Current Time {:%Y-%b-%d %H:%M:%S}'.format(datetime.datetime.now()))
+        if isinstance(self.profile_name, list):
+            for profile in self.profile_name:
+                self.run_checks(profile)
+        elif isinstance(self.profile_name, str):
+            self.current_profile = self.profile_name
+            self.run_checks(self.current_profile)
+
         if self.output_file:
             results = open(args['-o'], 'w')
             results.write(self.message)
             results.close()
-        print("Sweeper is complete!")
+        self.output("Sweeper is complete!")
 
 if __name__ == '__main__':
     # Get the args, pass them in or default them or fail
