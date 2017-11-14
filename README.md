@@ -10,6 +10,7 @@ A tool that sweeps your AWS account for still running or orphaned services that 
 ## Requirements
 Please ensure you have Python running locally. 2.x or 3.x should work fine.
 Before running please install the boto3 libraries either globally or locally.
+
 Globally:
 ```
 pip install boto3
