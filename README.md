@@ -22,14 +22,15 @@ pip install boto3 -t .
 Please also ensure that `aws configure` has been performed. It isn't an essential command but allows for multiple AWS accounts to be checked
 
 ## Configuration
-The configuration file `config.yml` contains two current sections; `regions_to_exclude` and `checks_to_exclude`. In the `regions_to_exclude` section, populate it with a list of regions that you do not want to check as part of the sweep.
+The configuration file `config.yml` contains three current sections; `regions_to_exclude`,`checks_to_exclude` and `profiles`. In the `regions_to_exclude` section, populate it with a list of regions that you do not want to check as part of the sweep.
 The `checks_to_exclude` section, populate it with a list of checks to skip e.g. `elb` or `opsworks`. An example has been included in this repo.
+The `profiles` section should include the name of profiles you wish to check. These name should be found in your `~/.aws/credentials` file
 
 ## Usage
 ```
 python Sweeper.py
 ```
-This will run Sweeper using the default config file and the AWS environment variables for access key and secret key. If these aren't set Sweeper will gracefully exit.
+This will run Sweeper using the default config file. If you do not provide the `profiles` config parameters Sweeper will look for AWS credentials in your environment variables
 ```
 python Sweeper.py -c <config>
 ```

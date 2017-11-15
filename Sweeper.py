@@ -49,7 +49,7 @@ class Sweeper(object):
     """
     def __init__(self, args):
         # Sensible class defaults
-        self.profile_name = ''
+        self.profile_list = []
         self.current_profile = ''
         self.regions_to_exclude = []
         self.checks_to_exclude = []
@@ -76,8 +76,8 @@ class Sweeper(object):
         # Function calls
         self.set_config_file(args)
         self.set_output(args)
-        self.set_profile(args)
         self.load_file()
+        self.set_profile(args)
         self.run_sweeper(args)
 
     def set_config_file(self, args):
@@ -103,25 +103,35 @@ class Sweeper(object):
         """
         if '-p' in args:
             # Profile provided. Is there a valid aws creds file installed?
+            # Overwrites profiles found in config.yml
+            if self.profile_list:
+                print("WARN: Overriding profiles found in config.yml")
             try:
                 home = expanduser("~")
                 creds_file = open("{}/.aws/credentials".format(home))
                 creds_file.close()
                 if ',' in str(args['-p']):
                     # Multiple profiles
-                    self.profile_name = str(args['-p']).split(',')
+                    self.profile_list = str(args['-p']).split(',')
                 else:
-                    self.profile_name = str(args['-p'])
+                    self.profile_list = [str(args['-p'])]
             except IOError:
                 print("ERROR: AWS Credentials file not found. Please run 'aws configure' first")
                 sys.exit(1)
+        elif self.profile_list:
+            # Profiles not provided but have been loaded from config file
+            config_file = 'config.yml'
+            if '-c' in args:
+                config_file = args['-c']
+            print("Using profiles found in {}: {}".format(config_file, self.profile_list))
         else:
-            # Profile not provided. Use env vars, if set
+            # Profile not provided either in config or cli. Use env vars, if set
             if "AWS_ACCESS_KEY_ID" in environ and "AWS_SECRET_ACCESS_KEY" in environ:
                 print("Using AWS environment variables for the current session")
             else:
                 print("ERROR: Unable to authenticate with AWS")
-                print("Either run 'aws configure' or set your AWS Environment Variables")
+                print(" Either run 'aws configure', set your AWS Environment Variables")
+                print(" Or set some profiles to run against in the config file or cmd line")
                 sys.exit(1)
 
     def load_file(self):
@@ -141,6 +151,10 @@ class Sweeper(object):
                     self.checks_to_exclude = params['checks_to_exclude']
                 else:
                     print("WARN: Excludes not found in the config file. All services will be checked")
+
+                if 'profiles' in params:
+                    self.profile_list = params['profiles']
+
             except yaml.YAMLError as err:
                 print(str(err))
                 sys.exit(1)
@@ -354,6 +368,7 @@ class Sweeper(object):
         """
         Wrapper function that runs the checks we need
         """
+        self.output("==========================================================")
         self.output('\nSweeping AWS profile ({})'.format(profile))
         self.output("==========================================================")
         if profile:
@@ -375,7 +390,7 @@ class Sweeper(object):
             # TODO more checks!
         except ProfileNotFound:
             self.output("AWS profile ({}) could not be found".format(self.current_profile))
-            if not isinstance(self.profile_name, list):
+            if not isinstance(self.profile_list, list):
                 sys.exit(1)
             else:
                 pass
@@ -390,11 +405,8 @@ class Sweeper(object):
             print("Sweeping to {}".format(args['-o']))
 
         self.output('Current Time {:%Y-%b-%d %H:%M:%S}'.format(datetime.datetime.now()))
-        if isinstance(self.profile_name, list):
-            for profile in self.profile_name:
-                self.run_checks(profile)
-        elif isinstance(self.profile_name, str):
-            self.run_checks(self.profile_name)
+        for profile in self.profile_list:
+            self.run_checks(profile)
 
         if self.output_file:
             results = open(args['-o'], 'w')

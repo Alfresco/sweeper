@@ -15,3 +15,5 @@ regions_to_exclude:
   - 'sa-east-1'
 checks_to_exclude:
   - ebs-snapshots
+profiles:
+  - default
