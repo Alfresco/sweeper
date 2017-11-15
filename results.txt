@@ -1,0 +1,96 @@
+Current Time 2017-Nov-15 13:46:56
+==========================================================
+
+Sweeping AWS profile (trials)
+==========================================================
+
+Checking for orphaned ELB's in us-east-1
+This sweep looks for ELB's without any attached instances.
+==========================================================
+ELB sweep in us-east-1 complete
+All configured regions checked for orphaned ELB's
+
+Checking for unattached EBS Volumes in us-east-1
+==========================================================
+vol-04c7a0960c6210e0e does not have any attachments
+vol-078fe2e7279f60d81 does not have any attachments
+vol-039a6e2604bf751c1 does not have any attachments
+vol-090a83e5540702b19 does not have any attachments
+vol-0131adb625f10544b does not have any attachments
+vol-088232e5a60858747 does not have any attachments
+vol-02616c96e5c1b723f does not have any attachments
+vol-08469f563534e5320 does not have any attachments
+vol-070408131fcec4765 does not have any attachments
+vol-061c07c603e3e573f does not have any attachments
+vol-0fca303291828d2a3 does not have any attachments
+vol-056c145fa094e090a does not have any attachments
+vol-09bd9ce609d617978 does not have any attachments
+vol-0e8098e08e72f00b9 does not have any attachments
+vol-0475a9b8104ea49da does not have any attachments
+vol-018d1b2b8de142f88 does not have any attachments
+vol-04bfa00dddc582574 does not have any attachments
+vol-09e2bb2e9d6647688 does not have any attachments
+vol-074b68601acb035e6 does not have any attachments
+vol-03441713e4be152f9 does not have any attachments
+vol-0e355b2c305be40ed does not have any attachments
+vol-02bb867f3b1a6e09e does not have any attachments
+vol-0210ce7a9773e9df5 does not have any attachments
+vol-04fea6e2b7c517ba6 does not have any attachments
+vol-00e93c5b458fe5363 does not have any attachments
+vol-0bd6320f9a1ba2a36 does not have any attachments
+vol-0fb79e43cc5bc27e9 does not have any attachments
+vol-05c38da2b7d35b7ec does not have any attachments
+vol-061492d536079bfc9 does not have any attachments
+vol-038c4bca6ac4bf065 does not have any attachments
+vol-0764160d44b6c8d01 does not have any attachments
+vol-0732448b7043e8f4d does not have any attachments
+vol-0f6a09a92aed74923 does not have any attachments
+vol-059c8b198420081db does not have any attachments
+vol-08e2e930f4b59bf98 does not have any attachments
+vol-0d77249c4f451550a does not have any attachments
+vol-0a50dd79b851138c8 does not have any attachments
+vol-0fda1039147856659 does not have any attachments
+vol-06e5cb2d1de453f51 does not have any attachments
+vol-0736dadc063ff942a does not have any attachments
+vol-0bf5c938e94a58528 does not have any attachments
+vol-063d876ef14db8be9 does not have any attachments
+vol-0e28980d67a92e514 does not have any attachments
+Volume sweep in us-east-1 complete
+All configured regions checked for unattached EBS volumes
+
+Checking for unattached EIP's in us-east-1
+==========================================================
+52.5.127.116 is not attached to any instance.
+EIP sweep complete in us-east-1
+
+Checking for Beanstalk environments still running in us-east-1
+This checks for environments which will keep services running at a cost
+==========================================================
+ElasticBeanstalk sweep complete in us-east-1
+
+Checking for Opsworks provisioned resources in us-east-1
+Opsworks has self-healing functionality that potentially could have
+healed a service that you destroyed elsewhere.
+==========================================================
+Checking Stack ID e417fbb3-b2bf-4dd1-8495-8ca1f7748fa6 for services. Information gathering for action.
+e417fbb3-b2bf-4dd1-8495-8ca1f7748fa6 has 0 running ECS Clusters
+e417fbb3-b2bf-4dd1-8495-8ca1f7748fa6 has 0 EIP's
+e417fbb3-b2bf-4dd1-8495-8ca1f7748fa6 has 1 Ec2 instances running
+e417fbb3-b2bf-4dd1-8495-8ca1f7748fa6 has 0 ELB's running
+e417fbb3-b2bf-4dd1-8495-8ca1f7748fa6 has 0 RDS instances running
+e417fbb3-b2bf-4dd1-8495-8ca1f7748fa6 has 0 EBS Volumes registered
+Checking Stack ID b35db1d4-78c7-40e8-8e9f-451c2cfe6d9f for services. Information gathering for action.
+b35db1d4-78c7-40e8-8e9f-451c2cfe6d9f has 0 running ECS Clusters
+b35db1d4-78c7-40e8-8e9f-451c2cfe6d9f has 0 EIP's
+b35db1d4-78c7-40e8-8e9f-451c2cfe6d9f has 239 Ec2 instances running
+b35db1d4-78c7-40e8-8e9f-451c2cfe6d9f has 0 ELB's running
+b35db1d4-78c7-40e8-8e9f-451c2cfe6d9f has 0 RDS instances running
+b35db1d4-78c7-40e8-8e9f-451c2cfe6d9f has 0 EBS Volumes registered
+Checking Stack ID c13c94a9-3d52-42b1-8486-75873d45655a for services. Information gathering for action.
+c13c94a9-3d52-42b1-8486-75873d45655a has 0 running ECS Clusters
+c13c94a9-3d52-42b1-8486-75873d45655a has 0 EIP's
+c13c94a9-3d52-42b1-8486-75873d45655a has 5 Ec2 instances running
+c13c94a9-3d52-42b1-8486-75873d45655a has 0 ELB's running
+c13c94a9-3d52-42b1-8486-75873d45655a has 0 RDS instances running
+c13c94a9-3d52-42b1-8486-75873d45655a has 0 EBS Volumes registered
+Opsworks sweep complete in us-east-1
