@@ -356,32 +356,32 @@ class Sweeper(object):
         except ClientError:
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
-    def run_checks(self, profile=None):
+    def run_checks(self):
         """
         Wrapper function that runs the checks we need
         """
-        self.output("==========================================================")
-        self.output('\nSweeping AWS profile ({})'.format(profile))
-        self.output("==========================================================")
-        if profile:
+        for profile in self.profile_list:
+            self.output("==========================================================")
+            self.output('\nSweeping AWS profile ({})'.format(profile))
+            self.output("==========================================================")
             self.current_profile = profile
-        try:
-            if 'elb' not in self.checks_to_exclude:
-                self.check_elbs()
-            if 'ebs-volumes' not in self.checks_to_exclude:
-                self.check_ebs_volumes()
-            if 'ebs-snapshots' not in self.checks_to_exclude:
-                self.check_snapshots()
-            if 'ec2-eips' not in self.checks_to_exclude:
-                self.check_eips()
-            if 'elastic-beanstalk' not in self.checks_to_exclude:
-                self.check_beanstalk_environments()
-            if 'opsworks' not in self.checks_to_exclude:
-                self.check_opsworks()
-            # TODO add s3 checks. Buckets that havent been access in n days. Are they still used?
-            # TODO more checks!
-        except ProfileNotFound:
-            self.output("AWS profile ({}) could not be found".format(self.current_profile))
+            try:
+                if 'elb' not in self.checks_to_exclude:
+                    self.check_elbs()
+                if 'ebs-volumes' not in self.checks_to_exclude:
+                    self.check_ebs_volumes()
+                if 'ebs-snapshots' not in self.checks_to_exclude:
+                    self.check_snapshots()
+                if 'ec2-eips' not in self.checks_to_exclude:
+                    self.check_eips()
+                if 'elastic-beanstalk' not in self.checks_to_exclude:
+                    self.check_beanstalk_environments()
+                if 'opsworks' not in self.checks_to_exclude:
+                    self.check_opsworks()
+                # TODO add s3 checks. Buckets that havent been access in n days. Are they still used?
+                # TODO more checks!
+            except ProfileNotFound:
+                self.output("AWS profile ({}) could not be found".format(self.current_profile))
 
     def run_sweeper(self, args):
         """
@@ -393,8 +393,7 @@ class Sweeper(object):
             print("INFO: Sweeping to {}".format(args['-o']))
 
         self.output('Current Time {:%Y-%b-%d %H:%M:%S}'.format(datetime.datetime.now()))
-        for profile in self.profile_list:
-            self.run_checks(profile)
+        self.run_checks()
 
         if self.output_file:
             results = open(args['-o'], 'w')
