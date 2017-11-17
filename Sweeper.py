@@ -10,6 +10,7 @@ Repo: https://github.com/Alfresco/sweeper
 from __future__ import print_function
 from os import environ
 from os.path import expanduser
+import os.path
 import sys
 import datetime
 import yaml
@@ -93,8 +94,7 @@ class Sweeper(object):
         """
         Sets whether to output to a file or not
         """
-        if '-o' in args:
-            self.output_file = True
+        self.output_file = '-o' in args
 
     def set_profile(self, args):
         """
@@ -123,11 +123,11 @@ class Sweeper(object):
             config_file = 'config.yml'
             if '-c' in args:
                 config_file = args['-c']
-            print("Using profiles found in {}: {}".format(config_file, self.profile_list))
+            print("INFO: Using profiles found in {}: {}".format(config_file, self.profile_list))
         else:
             # Profile not provided either in config or cli. Use env vars, if set
             if "AWS_ACCESS_KEY_ID" in environ and "AWS_SECRET_ACCESS_KEY" in environ:
-                print("Using AWS environment variables for the current session")
+                print("INFO: Using AWS environment variables for the current session")
             else:
                 print("ERROR: Unable to authenticate with AWS")
                 print(" Either run 'aws configure', set your AWS Environment Variables")
@@ -139,24 +139,30 @@ class Sweeper(object):
         Loads the *.yml file from either the args or local default
         """
         # First, lets read the YAML file and parse what we need
-        with open(self.config_location) as stream:
-            try:
+        try:
+            with open(self.config_location) as stream:
                 params = yaml.load(stream)
-                if 'regions_to_exclude' in params:
-                    for r in params['regions_to_exclude']:
-                        if r in self.regions:
-                            self.regions.remove(r)
+                if 'regions_to_exclude' in params and params['regions_to_exclude']:
+                    for region in params['regions_to_exclude']:
+                        if region in self.regions:
+                            self.regions.remove(region)
 
-                if 'checks_to_exclude' in params:
+                if 'checks_to_exclude' in params and params['checks_to_exclude']:
                     self.checks_to_exclude = params['checks_to_exclude']
-                else:
-                    print("WARN: Excludes not found in the config file. All services will be checked")
 
-                if 'profiles' in params:
+                if 'profiles' in params and params['profiles']:
                     self.profile_list = params['profiles']
 
-            except yaml.YAMLError as err:
-                print(str(err))
+        except yaml.YAMLError as err:
+            print(str(err))
+            sys.exit(1)
+        except IOError:
+            print("WARN: {} not found, loading default".format(self.config_location))
+            self.config_location = "./config.yml"
+            if os.path.isfile(self.config_location):
+                self.load_file()
+            else:
+                print("ERROR: Default config.yml cannot be found. Exiting")
                 sys.exit(1)
 
     def create_client(self, service, region):
@@ -298,9 +304,7 @@ class Sweeper(object):
                 self.output("This checks for environments which will keep services running at a cost")
                 self.output("==========================================================")
                 client = self.create_client('elasticbeanstalk', region)
-                response = client.describe_environments(
-                    IncludeDeleted=False
-                )
+                response = client.describe_environments(IncludeDeleted=False)
                 for environment in response['Environments']:
                     self.output("{} is still running. Did you know this?".format(environment['EnvironmentName']))
                 self.output("ElasticBeanstalk sweep complete in {}".format(region))
@@ -322,91 +326,74 @@ class Sweeper(object):
                 for stack in response['Stacks']:
                     # first list any ecs clusters
                     stack_id = stack['StackId']
-                    self.output("Checking {} for services. Information gathering for action.".format(stack_id))
+                    self.output("Checking Stack ID {} for services. Information gathering for action.".format(stack_id))
                     # ECS
-                    ecs = client.describe_ecs_clusters(
-                        StackId=stack_id
-                    )
+                    ecs = client.describe_ecs_clusters(StackId=stack_id)
                     self.output("{} has {} running ECS Clusters".format(stack_id, len(ecs['EcsClusters'])))
                     # EIP
-                    eip = client.describe_elastic_ips(
-                        StackId=stack_id
-                    )
+                    eip = client.describe_elastic_ips(StackId=stack_id)
                     self.output("{} has {} EIP's".format(stack_id, len(eip['ElasticIps'])))
                     # EC2 Instances
-                    instances = client.describe_instances(
-                        StackId=stack_id
-                    )
+                    instances = client.describe_instances(StackId=stack_id)
                     self.output("{} has {} Ec2 instances running".format(
                         stack_id,
                         len(instances['Instances']))
                     )
                     # ELB
-                    elbs = client.describe_elastic_load_balancers(
-                        StackId=stack_id
-                    )
+                    elbs = client.describe_elastic_load_balancers(StackId=stack_id)
                     self.output("{} has {} ELB's running".format(stack_id, len(elbs['ElasticLoadBalancers'])))
                     # RDS
-                    rds = client.describe_rds_db_instances(
-                        StackId=stack_id
-                    )
+                    rds = client.describe_rds_db_instances(StackId=stack_id)
                     self.output("{} has {} RDS instances running".format(
                         stack_id,
                         len(rds['RdsDbInstances']))
                     )
                     # EBS
-                    ebs = client.describe_volumes(
-                        StackId=stack_id
-                    )
+                    ebs = client.describe_volumes(StackId=stack_id)
                     self.output("{} has {} EBS Volumes registered".format(stack_id, len(ebs['Volumes'])))
 
                 self.output("Opsworks sweep complete in {}".format(region))
         except ClientError:
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
-    def run_checks(self, profile=None):
+    def run_checks(self):
         """
         Wrapper function that runs the checks we need
         """
-        self.output("==========================================================")
-        self.output('\nSweeping AWS profile ({})'.format(profile))
-        self.output("==========================================================")
-        if profile:
+        for profile in self.profile_list:
+            self.output("==========================================================")
+            self.output('\nSweeping AWS profile ({})'.format(profile))
+            self.output("==========================================================")
             self.current_profile = profile
-        try:
-            if 'elb' not in self.checks_to_exclude:
-                self.check_elbs()
-            if 'ebs-volumes' not in self.checks_to_exclude:
-                self.check_ebs_volumes()
-            if 'ebs-snapshots' not in self.checks_to_exclude:
-                self.check_snapshots()
-            if 'ec2-eips' not in self.checks_to_exclude:
-                self.check_eips()
-            if 'elastic-beanstalk' not in self.checks_to_exclude:
-                self.check_beanstalk_environments()
-            if 'opsworks' not in self.checks_to_exclude:
-                self.check_opsworks()
-            # TODO add s3 checks. Buckets that havent been access in n days. Are they still used?
-            # TODO more checks!
-        except ProfileNotFound:
-            self.output("AWS profile ({}) could not be found".format(self.current_profile))
-            if not isinstance(self.profile_list, list):
-                sys.exit(1)
-            else:
-                pass
+            try:
+                if 'elb' not in self.checks_to_exclude:
+                    self.check_elbs()
+                if 'ebs-volumes' not in self.checks_to_exclude:
+                    self.check_ebs_volumes()
+                if 'ebs-snapshots' not in self.checks_to_exclude:
+                    self.check_snapshots()
+                if 'ec2-eips' not in self.checks_to_exclude:
+                    self.check_eips()
+                if 'elastic-beanstalk' not in self.checks_to_exclude:
+                    self.check_beanstalk_environments()
+                if 'opsworks' not in self.checks_to_exclude:
+                    self.check_opsworks()
+                # TODO add s3 checks. Buckets that havent been access in n days. Are they still used?
+                # TODO more checks!
+            except ProfileNotFound:
+                self.output("AWS profile ({}) could not be found".format(self.current_profile))
 
     def run_sweeper(self, args):
         """
         Runs the sweeper based on the profile passed in and the config settings
         """
         if not self.output_file:
-            print("Sweeping to screen")
+            print("INFO: Sweeping to screen")
         else:
-            print("Sweeping to {}".format(args['-o']))
+            print("INFO: Sweeping to {}".format(args['-o']))
 
         self.output('Current Time {:%Y-%b-%d %H:%M:%S}'.format(datetime.datetime.now()))
-        for profile in self.profile_list:
-            self.run_checks(profile)
+        self.run_checks()
 
         if self.output_file:
             results = open(args['-o'], 'w')
@@ -417,12 +404,15 @@ class Sweeper(object):
 
 if __name__ == '__main__':
     # Get the args, pass them in or default them or fail
-    opts = {}
+    OPTS = {}
     while sys.argv:
         if sys.argv[0] == '-h':
             show_usage()
         elif sys.argv[0][0] == '-':
-            opts[sys.argv[0]] = sys.argv[1]
+            try:
+                OPTS[sys.argv[0]] = sys.argv[1]
+            except IndexError:
+                print("Skipping option {}: value not provided".format(sys.argv[0]))
         sys.argv = sys.argv[1:]
     print_banner()
-    Sweeper(opts)
+    Sweeper(OPTS)

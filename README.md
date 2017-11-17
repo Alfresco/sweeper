@@ -48,3 +48,9 @@ This will run Sweeper and output the results into a text file with the name of y
 - Extra checks to be added (S3)
 - Use instance profiles if running on an Ec2 instance
 - Appropriate use of roles when running in a Lambda
+
+## Develop
+Work in progress will be on the `Develop` branch. If you want to use the latest improvements, use this branch. All releases are tagged from the `Master` branch
+
+## Contribution Guidelines
+Please fork from Develop. Any forks to Master will be ignored. Raise a PR and the code will be reviewed in time. I will routinely merge from Develop to Master with new features that are in the Develop branch
