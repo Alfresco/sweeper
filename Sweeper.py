@@ -261,7 +261,7 @@ class Sweeper(object):
                     snapshot_id = snapshot['SnapshotId']
                     snapshot_found = False
                     for image in images['Images']:
-                        if 'BlockDeviceMappings' in image and image['BlockDeviceMappings']:
+                        if 'BlockDeviceMappings' in image:
                             for mapping in image['BlockDeviceMappings']:
                                 if 'Ebs' in mapping:
                                     if 'SnapshotId' in mapping['Ebs']:
