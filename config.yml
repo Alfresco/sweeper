@@ -16,4 +16,4 @@ regions_to_exclude:
 checks_to_exclude:
   - ebs-snapshots
 profiles:
-  - default
+  - qa
