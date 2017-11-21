@@ -228,7 +228,7 @@ class Sweeper(object):
 
     def check_snapshots(self):
         """
-        Checks if snapshots are paired to AMI's
+        Checks if EBS snapshots are paired to AMI's
         """
         try:
             for region in self.regions:
@@ -265,7 +265,9 @@ class Sweeper(object):
                             for mapping in image['BlockDeviceMappings']:
                                 if 'Ebs' in mapping:
                                     if 'SnapshotId' in mapping['Ebs']:
-                                        snapshot_found = mapping['Ebs']['SnapshotId'] == snapshot_id
+                                        if mapping['Ebs']['SnapshotId'] == snapshot_id:
+                                            snapshot_found = True
+                                            break
                     if not snapshot_found:
                         snapshot_list.append(snapshot_id)
                 self.output("There are {} snapshots to remove".format(len(snapshot_list)))
@@ -356,6 +358,39 @@ class Sweeper(object):
         except ClientError:
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
+    def check_rds_snapshots(self):
+        """
+        Checks for rds snapshots that are no longer linked to an active rds instance
+        """
+        def get_data(function, key, marker=None):
+            if marker:
+                response = function(Marker=marker)
+            else:
+                response = function()
+            if 'Marker' in response:
+                return response[key] + get_data(client, key, response['Marker'])
+            return response[key]
+
+        try:
+            for region in self.regions:
+                self.output("\nChecking for Orphaned RDS Snapshots in {}".format(region))
+                self.output("==========================================================")
+                client = self.create_client('rds', region)
+                snapshots = get_data(client.describe_db_snapshots, 'DBSnapshots')
+                instances = get_data(client.describe_db_instances, 'DBInstances')
+                for snapshot in snapshots:
+                    found = False
+                    for instance in instances:
+                        if instance['DBInstanceIdentifier'] == snapshot['DBInstanceIdentifier']:
+                            found = True
+                            break
+
+                    if not found:
+                        self.output("Snapshot {} no longer tied to an RDS instance".format(snapshot['DBSnapshotIdentifier']))
+                self.output("RDS Sweep complete in {}".format(region))
+        except ClientError:
+            self.output("Your AWS profile does not have access. Please fix this and try again\n")
+
     def run_checks(self):
         """
         Wrapper function that runs the checks we need
@@ -378,6 +413,8 @@ class Sweeper(object):
                     self.check_beanstalk_environments()
                 if 'opsworks' not in self.checks_to_exclude:
                     self.check_opsworks()
+                if 'rds-snapshots' not in self.checks_to_exclude:
+                    self.check_rds_snapshots()
                 # TODO add s3 checks. Buckets that havent been access in n days. Are they still used?
                 # TODO more checks!
             except ProfileNotFound:
@@ -399,6 +436,7 @@ class Sweeper(object):
             results = open(args['-o'], 'w')
             results.write(self.message)
             results.close()
+        self.output("********************")
         self.output("Sweeper is complete!")
         sys.exit(0)
 
