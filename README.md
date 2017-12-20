@@ -42,7 +42,60 @@ This will run Sweeper with an AWS profile or profiles. These profiles can be fou
 ```
 python Sweeper.py -o <output file>
 ```
-This will run Sweeper and output the results into a text file with the name of your choice e.g. `python Sweeper.py -o results.txt` 
+This will run Sweeper and output the results into a text file with the name of your choice e.g. `python Sweeper.py -o results.txt`
+
+## IAM Policy
+This is the policy to apply to a new user/role to run the Sweeper checks:
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "elasticloadbalancing:DescribeLoadBalancers",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "ec2:DescribeVolumes",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "ec2:DescribeAddresses",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "rds:DescribeDBSnapshots",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "rds:DescribeDBInstances",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "elasticbeanstalk:DescribeEnvironments",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "opsworks:DescribeStacks",
+                "opsworks:DescribeElasticIps",
+                "opsworks:DescribeElasticLoadBalancers",
+                "opsworks:DescribeInstances",
+                "opsworks:DescribeRdsDbInstances",
+                "opsworks:DescribeVolumes",
+                "opsworks:DescribeEcsClusters"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
 
 ## Future changes
 - Extra checks to be added (S3)

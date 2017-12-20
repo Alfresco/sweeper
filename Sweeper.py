@@ -204,7 +204,8 @@ class Sweeper(object):
                         self.output("{} does not have any instances attached".format(elb['LoadBalancerName']))
                 self.output("ELB sweep in {} complete".format(region))
                 self.output("All configured regions checked for orphaned ELB's")
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_ebs_volumes(self):
@@ -223,7 +224,8 @@ class Sweeper(object):
                         self.output("{} does not have any attachments".format(volume['VolumeId']))
                 self.output("Volume sweep in {} complete".format(region))
                 self.output("All configured regions checked for unattached EBS volumes")
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_snapshots(self):
@@ -275,7 +277,8 @@ class Sweeper(object):
                     for snap in snapshot_list:
                         self.output(snap)
                 self.output("Snapshot sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_eips(self):
@@ -292,7 +295,8 @@ class Sweeper(object):
                     if 'InstanceId' not in address:
                         self.output("{} is not attached to any instance.".format(address['PublicIp']))
                 self.output("EIP sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_beanstalk_environments(self):
@@ -310,7 +314,8 @@ class Sweeper(object):
                 for environment in response['Environments']:
                     self.output("{} is still running. Did you know this?".format(environment['EnvironmentName']))
                 self.output("ElasticBeanstalk sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_opsworks(self):
@@ -355,7 +360,8 @@ class Sweeper(object):
                     self.output("{} has {} EBS Volumes registered".format(stack_id, len(ebs['Volumes'])))
 
                 self.output("Opsworks sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_rds_snapshots(self):
@@ -388,7 +394,8 @@ class Sweeper(object):
                     if not found:
                         self.output("Snapshot {} no longer tied to an RDS instance".format(snapshot['DBSnapshotIdentifier']))
                 self.output("RDS Sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def run_checks(self):
