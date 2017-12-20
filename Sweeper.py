@@ -204,7 +204,8 @@ class Sweeper(object):
                         self.output("{} does not have any instances attached".format(elb['LoadBalancerName']))
                 self.output("ELB sweep in {} complete".format(region))
                 self.output("All configured regions checked for orphaned ELB's")
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_ebs_volumes(self):
@@ -223,12 +224,13 @@ class Sweeper(object):
                         self.output("{} does not have any attachments".format(volume['VolumeId']))
                 self.output("Volume sweep in {} complete".format(region))
                 self.output("All configured regions checked for unattached EBS volumes")
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_snapshots(self):
         """
-        Checks if snapshots are paired to AMI's
+        Checks if EBS snapshots are paired to AMI's
         """
         try:
             for region in self.regions:
@@ -265,7 +267,9 @@ class Sweeper(object):
                             for mapping in image['BlockDeviceMappings']:
                                 if 'Ebs' in mapping:
                                     if 'SnapshotId' in mapping['Ebs']:
-                                        snapshot_found = mapping['Ebs']['SnapshotId'] == snapshot_id
+                                        if mapping['Ebs']['SnapshotId'] == snapshot_id:
+                                            snapshot_found = True
+                                            break
                     if not snapshot_found:
                         snapshot_list.append(snapshot_id)
                 self.output("There are {} snapshots to remove".format(len(snapshot_list)))
@@ -273,7 +277,8 @@ class Sweeper(object):
                     for snap in snapshot_list:
                         self.output(snap)
                 self.output("Snapshot sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_eips(self):
@@ -290,7 +295,8 @@ class Sweeper(object):
                     if 'InstanceId' not in address:
                         self.output("{} is not attached to any instance.".format(address['PublicIp']))
                 self.output("EIP sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_beanstalk_environments(self):
@@ -308,7 +314,8 @@ class Sweeper(object):
                 for environment in response['Environments']:
                     self.output("{} is still running. Did you know this?".format(environment['EnvironmentName']))
                 self.output("ElasticBeanstalk sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def check_opsworks(self):
@@ -353,7 +360,42 @@ class Sweeper(object):
                     self.output("{} has {} EBS Volumes registered".format(stack_id, len(ebs['Volumes'])))
 
                 self.output("Opsworks sweep complete in {}".format(region))
-        except ClientError:
+        except ClientError as err:
+            self.output(err)
+            self.output("Your AWS profile does not have access. Please fix this and try again\n")
+
+    def check_rds_snapshots(self):
+        """
+        Checks for rds snapshots that are no longer linked to an active rds instance
+        """
+        def get_data(function, key, marker=None):
+            if marker:
+                response = function(Marker=marker)
+            else:
+                response = function()
+            if 'Marker' in response:
+                return response[key] + get_data(client, key, response['Marker'])
+            return response[key]
+
+        try:
+            for region in self.regions:
+                self.output("\nChecking for Orphaned RDS Snapshots in {}".format(region))
+                self.output("==========================================================")
+                client = self.create_client('rds', region)
+                snapshots = get_data(client.describe_db_snapshots, 'DBSnapshots')
+                instances = get_data(client.describe_db_instances, 'DBInstances')
+                for snapshot in snapshots:
+                    found = False
+                    for instance in instances:
+                        if instance['DBInstanceIdentifier'] == snapshot['DBInstanceIdentifier']:
+                            found = True
+                            break
+
+                    if not found:
+                        self.output("Snapshot {} no longer tied to an RDS instance".format(snapshot['DBSnapshotIdentifier']))
+                self.output("RDS Sweep complete in {}".format(region))
+        except ClientError as err:
+            self.output(err)
             self.output("Your AWS profile does not have access. Please fix this and try again\n")
 
     def run_checks(self):
@@ -378,6 +420,8 @@ class Sweeper(object):
                     self.check_beanstalk_environments()
                 if 'opsworks' not in self.checks_to_exclude:
                     self.check_opsworks()
+                if 'rds-snapshots' not in self.checks_to_exclude:
+                    self.check_rds_snapshots()
                 # TODO add s3 checks. Buckets that havent been access in n days. Are they still used?
                 # TODO more checks!
             except ProfileNotFound:
@@ -399,6 +443,7 @@ class Sweeper(object):
             results = open(args['-o'], 'w')
             results.write(self.message)
             results.close()
+        self.output("********************")
         self.output("Sweeper is complete!")
         sys.exit(0)
 
