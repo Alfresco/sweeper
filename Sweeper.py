@@ -236,7 +236,7 @@ class Sweeper(object):
             for region in self.regions:
                 snapshot_list = []
                 self.output("\nChecking for unused snapshots in {}".format(region))
-                self.output("**WARNING: This can take along time. Please use with caution**")
+                self.output("**WARNING: This can take a long time. Please use with caution**")
                 self.output("==========================================================")
                 client = self.create_client('ec2', region)
                 snapshots = client.describe_snapshots(
@@ -460,4 +460,7 @@ if __name__ == '__main__':
                 print("Skipping option {}: value not provided".format(sys.argv[0]))
         sys.argv = sys.argv[1:]
     print_banner()
-    Sweeper(OPTS)
+    try:
+        Sweeper(OPTS)
+    except KeyboardInterrupt:
+        print("Exiting Sweeper!")

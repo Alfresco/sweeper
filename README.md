@@ -57,22 +57,20 @@ This is the policy to apply to a new user/role to run the Sweeper checks:
         },
         {
             "Effect": "Allow",
-            "Action": "ec2:DescribeVolumes",
+            "Action": [
+                "ec2:DescribeAddresses",
+                "ec2:DescribeVolumes",
+                "ec2:DescribeSnapshots",
+                "ec2:DescribeImages"
+            ],
             "Resource": "*"
         },
         {
             "Effect": "Allow",
-            "Action": "ec2:DescribeAddresses",
-            "Resource": "*"
-        },
-        {
-            "Effect": "Allow",
-            "Action": "rds:DescribeDBSnapshots",
-            "Resource": "*"
-        },
-        {
-            "Effect": "Allow",
-            "Action": "rds:DescribeDBInstances",
+            "Action": [
+                "rds:DescribeDBInstances",
+                "rds:DescribeDBSnapshots"
+            ],
             "Resource": "*"
         },
         {
